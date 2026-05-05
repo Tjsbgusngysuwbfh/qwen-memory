@@ -1,0 +1,23 @@
+# Data
+data/
+*.db
+*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Fix script (temporary)
+fix_paths.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
