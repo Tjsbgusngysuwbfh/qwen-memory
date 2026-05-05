@@ -595,7 +595,10 @@ def fused_search(query, limit=10):
 
         # 2. 语义搜索补充（去重，追加到有序列表尾部）
         try:
-            from semantic import semantic_search
+            try:
+                from .semantic import semantic_search
+            except ImportError:
+                from semantic import semantic_search
             sem = semantic_search(query, top_k=limit)
             for s in sem.get("sessions", []):
                 sid = s.get("session_id", "")

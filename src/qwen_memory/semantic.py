@@ -20,6 +20,12 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+try:
+    from . import store
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import store
+
 # 中文分词（简单实现，基于字符 n-gram + 常见词）
 # 对于 TF-IDF 来说，字符级 n-gram 对中文效果已经不错
 
@@ -162,9 +168,6 @@ class SemanticIndex:
 
 def build_index_from_db():
     """从数据库构建语义索引（自动保存元数据用于失效检测）"""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import store
-
     idx = SemanticIndex()
 
     conn = store.get_db()
@@ -214,7 +217,6 @@ def semantic_search(query, top_k=10, min_score=0.05):
     # 检查索引是否过期
     fresh, reason = None, None
     try:
-        import store
         fresh, reason = store.check_semantic_index_fresh()
     except Exception:
         pass

@@ -10,8 +10,11 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import store
+try:
+    from . import store
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import store
 
 PORT = 37777
 

@@ -19,8 +19,13 @@ import uuid, os
 from datetime import datetime
 
 # 确保能找到 store 模块
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import store
+try:
+    from . import store
+    from .semantic import semantic_search, build_index_from_db
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import store
+    from semantic import semantic_search, build_index_from_db
 
 
 def cmd_add(args):
@@ -89,7 +94,7 @@ def cmd_recent(args):
     for s in sessions:
         tags = json.loads(s["tags"]) if s["tags"] else []
         tag_str = f" [{', '.join(tags)}]" if tags else ""
-        ended = "✓" if s["ended_at"] else "⏳"
+        ended = "DONE" if s["ended_at"] else "OPEN"
         print(f"  {ended} [{s['session_id']}] {s['created_at'][:16]} "
               f"importance={s['importance']}{tag_str}")
         if s["summary_short"]:
@@ -209,7 +214,6 @@ def cmd_progressive(args):
 
 def cmd_semantic(args):
     """语义搜索（TF-IDF + 余弦相似度）"""
-    from semantic import semantic_search
     result = semantic_search(args.query, top_k=args.limit)
 
     # 从数据库获取详情
@@ -238,7 +242,6 @@ def cmd_semantic(args):
 
 def cmd_rebuild_index(args):
     """重建语义索引"""
-    from semantic import build_index_from_db
     idx = build_index_from_db()
     stats = idx.stats()
     print(f"语义索引已重建")

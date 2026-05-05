@@ -1,8 +1,9 @@
 """Qwen Memory 压力测试 v2"""
 import sys, os, time, json, threading, random, string
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import store
-from semantic import SemanticIndex, build_index_from_db
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+from qwen_memory import store
+from qwen_memory.semantic import SemanticIndex, build_index_from_db
 
 PASS = FAIL = 0
 RESULTS = []
@@ -30,12 +31,12 @@ print("="*60)
 
 print("\n1. 数据完整性")
 test("批量写入1000条", lambda: (
-    [fresh_db()] or
+    fresh_db(),
     [store.upsert_session(session_id=f"b{i:04d}", summary=f"bulk#{i}: "+"".join(random.choices("abcdefghij",k=50)), importance=random.random()) for i in range(1000)],
     f"total={store.get_stats()['total_sessions']}"
 )[-1])
 test("批量观察500条", lambda: (
-    [store.upsert_session(session_id="obs-t", summary="target")] or
+    store.upsert_session(session_id="obs-t", summary="target"),
     [store.add_observation(session_id="obs-t", obs_type=random.choice(["decision","bugfix","discovery","task"]), content=f"obs#{i}: "+"".join(random.choices(string.ascii_letters,k=80)), importance=random.random()) for i in range(500)],
     "500 ok"
 )[-1])
@@ -105,7 +106,7 @@ store.upsert_session(session_id="demo2", summary="桌面自动化 pywinauto OCR 
 test("TF-IDF准确性", lambda: f"queries={sum(1 for q in ['怎么控制安卓设备','桌面元素定位','ADB版本管理'] if build_index_from_db().search(q, top_k=3))}/3")
 
 print("\n6. MCP Server")
-from mcp_server import handle_tool_call
+from qwen_memory.mcp_server import handle_tool_call
 test("MCP工具调用", lambda: (
     json.loads(handle_tool_call("mem_search", {"query": "手机"})),
     json.loads(handle_tool_call("mem_add_session", {"session_id": "mcp", "summary": "test"})),

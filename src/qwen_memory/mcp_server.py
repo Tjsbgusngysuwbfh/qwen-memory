@@ -29,8 +29,13 @@ import sys
 import os
 import json
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import store
+try:
+    from . import store
+    from .semantic import semantic_search
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import store
+    from semantic import semantic_search
 
 # MCP 协议版本
 MCP_PROTOCOL_VERSION = "2024-11-05"
@@ -156,7 +161,6 @@ def handle_tool_call(tool_name, arguments):
                 }
             elif mode == "semantic":
                 try:
-                    from semantic import semantic_search
                     results = semantic_search(query, top_k=limit)
                 except Exception as e:
                     results = {"error": str(e)}

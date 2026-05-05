@@ -1,7 +1,8 @@
 """Qwen Memory 回归测试 v3 — 无锁冲突"""
 import sys, os, time, json, sqlite3
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import store
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+from qwen_memory import store
 
 PASS = FAIL = 0
 def test(name, fn):
@@ -17,6 +18,7 @@ def test(name, fn):
 
 def use_db(name):
     """切换到指定数据库文件"""
+    store.DB_DIR.mkdir(parents=True, exist_ok=True)
     p = store.DB_DIR / f"reg_{name}.db"
     if p.exists(): p.unlink()
     store.DB_PATH = p
@@ -58,14 +60,14 @@ use_db("semantic")
 store.upsert_session(session_id="s1", summary="Alpha content", importance=0.5)
 store.upsert_session(session_id="s2", summary="Beta content", importance=0.5)
 
-test("构建索引", lambda: (__import__('semantic').build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
+test("构建索引", lambda: (__import__('qwen_memory.semantic', fromlist=['build_index_from_db']).build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
 test("内容变更检测", lambda: (store.upsert_session(session_id="s1", summary="XYZ 123 completely different"), time.sleep(0.01), store.check_semantic_index_fresh())[-1][0] == False and "stale")
-test("重建恢复", lambda: (__import__('semantic').build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
+test("重建恢复", lambda: (__import__('qwen_memory.semantic', fromlist=['build_index_from_db']).build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
 
 # === 3. CLI 通路 ===
 print("\n3. CLI 通路")
 use_db("cli")
-from mem import cmd_add, cmd_end, cmd_obs, cmd_search, cmd_search_obs, cmd_recent, cmd_detail, cmd_stats, cmd_versions, cmd_rollback, cmd_semantic, cmd_rebuild_index
+from qwen_memory.mem import cmd_add, cmd_end, cmd_obs, cmd_search, cmd_search_obs, cmd_recent, cmd_detail, cmd_stats, cmd_versions, cmd_rollback, cmd_semantic, cmd_rebuild_index
 import argparse
 def mk(**kw): return argparse.Namespace(**kw)
 
