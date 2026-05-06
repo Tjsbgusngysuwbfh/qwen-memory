@@ -4,21 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qwen-memory"
-version = "1.0.0"
-description = "Persistent memory system for AI coding agents with SQLite, FTS5, and TF-IDF semantic search"
+version = "1.1.0"
+description = "Persistent memory system for AI coding agents with SQLite, FTS5, TF-IDF semantic search, and MCP tools"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
+authors = [
+  { name = "Tjsbgusngysuwbfh" }
+]
 dependencies = [
-    "scikit-learn>=1.0",
-    "numpy>=1.20",
+  "numpy>=1.20",
+  "scikit-learn>=1.0",
+  "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = [
+  "pytest>=7.0",
+]
 
 [project.scripts]
 qwen-mem = "qwen_memory.mem:main"
+qwen-memory-mcp = "qwen_memory.mcp_server:main"
+qwen-memory-web = "qwen_memory.web_viewer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

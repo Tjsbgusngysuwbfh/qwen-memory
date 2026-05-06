@@ -1,38 +1,67 @@
-"""Qwen Memory 回归测试 v3 — 无锁冲突"""
-import sys, os, time, json, sqlite3
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "src"))
-from qwen_memory import store
+"""Qwen Memory 回归测试 v3。"""
+
+import argparse
+import json
+import os
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+from bootstrap import bootstrap
+
+bootstrap()
+import store
+from mem import (
+    cmd_add,
+    cmd_detail,
+    cmd_end,
+    cmd_obs,
+    cmd_recent,
+    cmd_rebuild_index,
+    cmd_search,
+    cmd_search_obs,
+    cmd_semantic,
+    cmd_stats,
+    cmd_versions,
+)
 
 PASS = FAIL = 0
+
+
 def test(name, fn):
     global PASS, FAIL
     t0 = time.time()
     try:
         result = fn()
         PASS += 1
-        print(f"  PASS  {name} ({time.time()-t0:.3f}s) → {str(result)[:80]}")
+        print(f"  PASS  {name} ({time.time() - t0:.3f}s) -> {str(result)[:80]}")
     except Exception as e:
         FAIL += 1
-        print(f"  FAIL  {name} ({time.time()-t0:.3f}s) → {e}")
+        print(f"  FAIL  {name} ({time.time() - t0:.3f}s) -> {e}")
+
 
 def use_db(name):
-    """切换到指定数据库文件"""
-    store.DB_DIR.mkdir(parents=True, exist_ok=True)
-    p = store.DB_DIR / f"reg_{name}.db"
-    if p.exists(): p.unlink()
-    store.DB_PATH = p
-    return p
+    path = store.DB_DIR / f"reg_{name}.db"
+    if path.exists():
+        path.unlink()
+    store.set_db_path(path)
+    return path
 
-print("="*60)
+
+def mk(**kw):
+    return argparse.Namespace(**kw)
+
+
+print("=" * 60)
 print("回归测试 v3")
-print("="*60)
+print("=" * 60)
 
-# === 1. 旧库升级 ===
 print("\n1. 旧库升级兼容性")
 use_db("migrate")
 conn = sqlite3.connect(str(store.DB_PATH))
-conn.executescript("""
+conn.executescript(
+    """
     CREATE TABLE sessions (
         id INTEGER PRIMARY KEY, session_id TEXT UNIQUE, started_at TEXT,
         ended_at TEXT, summary TEXT, summary_short TEXT, project_path TEXT, model TEXT,
@@ -45,32 +74,43 @@ conn.executescript("""
     );
     INSERT INTO sessions VALUES (1, 'old', '2026-01-01', NULL, 'old', 'short', '', '', '[]', '[]', '[]', '[]', 0, 0.5, 'abc');
     INSERT INTO observations VALUES (1, 'old', 'note', 'old obs', '', '', '2026-01-01', 0.5, '[]');
-""")
+    """
+)
 conn.close()
 
 test("旧库打开", lambda: store.get_db() and "OK")
-test("旧库读", lambda: store.get_session_detail("old")["session"]["summary"])
-test("旧库写", lambda: (store.upsert_session(session_id="old", summary="upd"), store.get_session_detail("old"))[-1]["session"]["summary"])
-test("旧库字段", lambda: store.get_session_detail("old")["session"].get("updated_at") or (_ for _ in ()).throw(Exception("no updated_at")))
-test("旧库FTS", lambda: len(store.search_sessions("upd")) or (_ for _ in ()).throw(Exception("empty")))
+test("旧库读取", lambda: store.get_session_detail("old")["session"]["summary"])
+test(
+    "旧库写入",
+    lambda: (store.upsert_session(session_id="old", summary="upd"), store.get_session_detail("old"))[-1]["session"]["summary"],
+)
+test(
+    "旧库字段补齐",
+    lambda: store.get_session_detail("old")["session"].get("updated_at")
+    or (_ for _ in ()).throw(Exception("missing updated_at")),
+)
+test("旧库 FTS", lambda: len(store.search_sessions("upd")) or (_ for _ in ()).throw(Exception("empty")))
 
-# === 2. 语义索引失效 ===
 print("\n2. 语义索引失效检测")
 use_db("semantic")
 store.upsert_session(session_id="s1", summary="Alpha content", importance=0.5)
 store.upsert_session(session_id="s2", summary="Beta content", importance=0.5)
 
-test("构建索引", lambda: (__import__('qwen_memory.semantic', fromlist=['build_index_from_db']).build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
-test("内容变更检测", lambda: (store.upsert_session(session_id="s1", summary="XYZ 123 completely different"), time.sleep(0.01), store.check_semantic_index_fresh())[-1][0] == False and "stale")
-test("重建恢复", lambda: (__import__('qwen_memory.semantic', fromlist=['build_index_from_db']).build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
+test("构建索引", lambda: (__import__("semantic").build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
+test(
+    "内容变更检测",
+    lambda: (
+        store.upsert_session(session_id="s1", summary="XYZ 123 completely different"),
+        time.sleep(0.01),
+        store.check_semantic_index_fresh(),
+    )[-1][0]
+    is False
+    and "stale",
+)
+test("重建恢复", lambda: (__import__("semantic").build_index_from_db(), store.check_semantic_index_fresh())[-1][0] and "fresh")
 
-# === 3. CLI 通路 ===
 print("\n3. CLI 通路")
 use_db("cli")
-from qwen_memory.mem import cmd_add, cmd_end, cmd_obs, cmd_search, cmd_search_obs, cmd_recent, cmd_detail, cmd_stats, cmd_versions, cmd_rollback, cmd_semantic, cmd_rebuild_index
-import argparse
-def mk(**kw): return argparse.Namespace(**kw)
-
 test("add", lambda: cmd_add(mk(session="c", summary="CLI", short="", project="", model="", tags="a", importance=0.7, tokens=0)) or "OK")
 test("obs", lambda: cmd_obs(mk(session="c", type="bugfix", content="obs", importance=0.6, tags="x")) or "OK")
 test("end", lambda: cmd_end(mk(session="c", summary="end", short="")) or "OK")
@@ -83,7 +123,6 @@ test("versions", lambda: cmd_versions(mk(type="session", entity="c", limit=5)) o
 test("rebuild-index", lambda: cmd_rebuild_index(mk()) or "OK")
 test("semantic", lambda: cmd_semantic(mk(query="CLI", limit=5)) or "OK")
 
-# === 4. 融合检索排序 ===
 print("\n4. 融合检索排序")
 use_db("ranking")
 store.upsert_session(session_id="r1", summary="Alpha 关键词精确", importance=0.9)
@@ -93,19 +132,31 @@ store.upsert_session(session_id="r4", summary="Alpha 语义相近", importance=0
 
 test("精确匹配排第一", lambda: store.fused_search("Alpha")["sessions"][0]["session_id"] == "r1")
 test("多次稳定", lambda: all(store.fused_search("Alpha")["sessions"][0]["session_id"] == "r1" for _ in range(5)))
-test("无重复", lambda: (ids := [s["session_id"] for s in store.fused_search("Alpha")["sessions"]], len(ids) == len(set(ids)))[-1])
-test("语义不覆盖关键词", lambda: (
-    r := store.fused_search("Alpha"),
-    kw := [i for i, s in enumerate(r["sessions"]) if s["session_id"] in ("r1", "r2")],
-    sem := [i for i, s in enumerate(r["sessions"]) if s["session_id"] == "r4"]
-)[-1] and all(k < s for k in kw for s in sem) and "OK")
+test(
+    "无重复结果",
+    lambda: (ids := [s["session_id"] for s in store.fused_search("Alpha")["sessions"]], len(ids) == len(set(ids)))[-1],
+)
+test(
+    "语义结果不覆盖关键词结果",
+    lambda: (
+        r := store.fused_search("Alpha"),
+        kw := [i for i, s in enumerate(r["sessions"]) if s["session_id"] in ("r1", "r2")],
+        sem := [i for i, s in enumerate(r["sessions"]) if s["session_id"] == "r4"],
+    )[-1]
+    and all(k < s for k in kw for s in sem)
+    and "OK",
+)
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print(f"结果: {PASS} PASS / {FAIL} FAIL")
-print("="*60)
+print("=" * 60)
 
-# 清理
-for f in os.listdir(str(store.DB_DIR)):
-    if f.startswith("reg_") and f.endswith(".db"):
-        os.unlink(str(store.DB_DIR / f))
+for path in Path(store.DB_DIR).glob("reg_*.db*"):
+    for _ in range(5):
+        try:
+            path.unlink()
+            break
+        except PermissionError:
+            time.sleep(0.05)
+
 sys.exit(0 if FAIL == 0 else 1)

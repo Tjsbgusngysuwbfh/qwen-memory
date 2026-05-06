@@ -1,18 +1,22 @@
 """
-Qwen Memory Web Viewer — 浏览器查看/搜索历史记忆
-启动: py web_viewer.py [--port 37777]
-访问: http://localhost:37777
+Qwen Memory Web Viewer
+
+启动:
+  python -m qwen_memory.web_viewer --port 37777
+
+访问:
+  http://localhost:37777
 """
+
 import http.server
 import json
 import os
 import sys
 import urllib.parse
-from pathlib import Path
 
-try:
+if __package__:
     from . import store
-except ImportError:
+else:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import store
 
@@ -37,7 +41,6 @@ h2 { color: #8b949e; margin: 20px 0 10px; font-size: 16px; }
 .card-meta { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
 .card-summary { font-size: 14px; color: #c9d1d9; line-height: 1.5; }
 .tag { display: inline-block; background: #1f6feb33; color: #58a6ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 4px; }
-.tag-type { background: #238636; color: #3fb950; }
 .tag-important { background: #9e6a03; color: #d29922; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
@@ -56,7 +59,7 @@ h2 { color: #8b949e; margin: 20px 0 10px; font-size: 16px; }
 </style>
 </head>
 <body>
-<h1>🧠 Qwen Memory</h1>
+<h1>Qwen Memory</h1>
 
 <div id="stats-view"></div>
 <input class="search-box" id="search" placeholder="搜索记忆..." oninput="doSearch(this.value)">
@@ -90,12 +93,13 @@ async function loadRecent() {
 function renderSessionList(sessions) {
   const el = document.getElementById('list-view');
   el.innerHTML = sessions.map(s => {
-    const tags = (s.tags || '[]').replace(/["\\[\\]]/g,'').split(',').filter(Boolean);
+    const tags = (s.tags || '[]').replace(/["\\[\\]]/g, '').split(',').filter(Boolean);
+    const createdAt = s.created_at?.slice(0, 16) || '?';
     return `<div class="card" onclick="showDetail('${s.session_id}')">
       <div class="card-title">${s.session_id}</div>
-      <div class="card-meta">${s.started_at?.slice(0,16) || '?'} · importance: ${s.importance}
+      <div class="card-meta">${createdAt} · importance: ${s.importance}
         ${tags.map(t => `<span class="tag">${t}</span>`).join('')}
-        ${s.importance >= 0.8 ? '<span class="tag tag-important">高</span>' : ''}
+        ${s.importance >= 0.8 ? '<span class="tag tag-important">高优先级</span>' : ''}
       </div>
       <div class="card-summary">${s.summary_short || ''}</div>
     </div>`;
@@ -111,7 +115,6 @@ function doSearch(q) {
     document.getElementById('detail-view').style.display = 'none';
     document.getElementById('list-view').style.display = 'block';
     renderSessionList(r.sessions || []);
-    // 也显示观察结果
     const obsEl = document.getElementById('list-view');
     const obs = r.observations || [];
     if (obs.length) {
@@ -136,9 +139,9 @@ async function showDetail(id) {
   el.innerHTML = `
     <div class="back-btn" onclick="backToList()">← 返回列表</div>
     <h2>${s.session_id}</h2>
-    <div class="card-meta">${s.started_at} → ${s.ended_at || '进行中'} · importance: ${s.importance}</div>
+    <div class="card-meta">${s.created_at} · ${s.ended_at || '进行中'} · importance: ${s.importance}</div>
     <div class="card" style="cursor:default">
-      <div class="card-summary">${s.summary || '无摘要'}</div>
+      <div class="card-summary">${s.summary || '暂无摘要'}</div>
     </div>
     <h2>观察 (${d.observations.length})</h2>
     <div class="obs-list">${d.observations.map(o =>
@@ -150,9 +153,9 @@ async function showDetail(id) {
       </div>`
     ).join('')}</div>
     <h2>快照 (${d.snapshots.length})</h2>
-    ${d.snapshots.map(s => `<div class="card" style="cursor:default">
-      <div class="card-meta">[${s.snapshot_type}] ${s.title} · ${s.created_at}</div>
-      <div class="card-summary">${s.description || ''}</div>
+    ${d.snapshots.map(snap => `<div class="card" style="cursor:default">
+      <div class="card-meta">[${snap.snapshot_type}] ${snap.title} · ${snap.created_at}</div>
+      <div class="card-summary">${snap.description || ''}</div>
     </div>`).join('')}
   `;
 }
@@ -217,19 +220,20 @@ class MemoryHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(content.encode("utf-8"))
 
     def log_message(self, format, *args):
-        pass  # 静默日志
+        pass
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser()
+
+    parser = argparse.ArgumentParser(description="Qwen Memory 本地查看器")
     parser.add_argument("--port", "-p", type=int, default=PORT)
     args = parser.parse_args()
 
     server = http.server.HTTPServer(("127.0.0.1", args.port), MemoryHandler)
-    print(f"Qwen Memory Web Viewer")
-    print(f"   http://localhost:{args.port}")
-    print(f"   Ctrl+C 停止")
+    print("Qwen Memory Web Viewer")
+    print(f"  http://localhost:{args.port}")
+    print("  Ctrl+C 停止")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

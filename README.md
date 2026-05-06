@@ -1,100 +1,155 @@
 # Qwen Memory
 
-一个面向 AI 编码代理的轻量持久化记忆系统。  
-主打 `SQLite + FTS5 + TF-IDF`，中文开箱即用，依赖尽量克制。
+一个面向 AI 编码代理的轻量持久化记忆系统，围绕个人工作流设计，主打单机可控、依赖克制、中文友好。
 
-English summary: A lightweight persistent memory system for AI coding agents, built with SQLite, FTS5, and TF-IDF semantic search.
+English summary: Lightweight persistent memory for AI coding agents with SQLite, FTS5, TF-IDF semantic search, MCP tools, and Chinese-first defaults.
 
-## 功能特性
+## 特性
 
-- **持久化记忆**：会话摘要、观察记录、项目快照可跨会话保存
-- **三层检索**：`FTS5` 全文检索 -> `LIKE` 兜底 -> `TF-IDF` 语义搜索
-- **版本控制**：每次写入都会生成版本快照，支持回滚
-- **融合搜索**：关键词优先、语义补充、有序去重
-- **Web 查看器**：可在 `http://localhost:37777` 浏览和搜索历史记忆
-- **MCP Server**：提供 8 个 MCP 工具，方便其他应用接入
-- **Schema 迁移**：旧数据库首次打开时可自动升级
-- **中文原生**：基于字符 `n-gram` 分词，对中文更友好
+- 持久化记忆：保存会话摘要、观察记录和项目快照
+- 三层检索：FTS5 全文检索、LIKE 兜底、TF-IDF 语义补充
+- 版本恢复：写入自动留痕，支持内容层恢复与回滚
+- 触发路由：按规则决定是否注入历史上下文，并记录命中日志
+- 预算日志：记录 token 预算、注入结果和 `cache_hit`
+- MCP 集成：通过 stdio 暴露记忆工具，方便接入代理系统
+- Web 查看器：本地浏览最近会话、详情和搜索结果
 
-## 快速开始
+## 架构
+
+当前版本已经从早期单体 `store.py` 演进为按职责拆分的结构：
+
+```text
+src/qwen_memory/
+  db.py             # 数据库连接、时间工具、路径配置
+  migrations.py     # Schema 初始化与自动迁移
+  fts.py            # FTS 索引同步与重建
+  repository.py     # 会话、观察、快照 CRUD
+  services.py       # 搜索、版本恢复、预算日志、触发日志
+  trigger_router.py # 触发规则路由
+  budget.py         # 预算裁剪与压缩逻辑
+  semantic.py       # TF-IDF 语义索引
+  store.py          # 兼容门面
+  mem.py            # CLI
+  mcp_server.py     # MCP stdio server
+  web_viewer.py     # 本地查看器
+```
+
+## 安装
 
 ```bash
 pip install -e .
-
-# 插入演示数据
-python -m qwen_memory.mem init-demo
-
-# 搜索
-python -m qwen_memory.mem search "关键词"
-python -m qwen_memory.mem semantic "语义查询"
-
-# 启动 Web 查看器
-python -m qwen_memory.web_viewer --port 37777
 ```
 
-## CLI 命令
+开发依赖：
 
-| 命令 | 说明 |
-|---------|-------------|
-| `add --summary "..." --importance 0.9` | 保存会话 |
-| `obs --session "id" --type bugfix --content "..."` | 添加观察 |
-| `end --session "id" --summary "..."` | 结束会话 |
-| `search "query"` | 关键词搜索 |
-| `semantic "query"` | 语义搜索 |
-| `recent` | 查看最近会话 |
-| `detail "session_id"` | 查看会话详情 |
-| `versions -t session -e "id"` | 查看版本历史 |
-| `rollback -t session -e "id" -s 1` | 回滚到更早版本 |
-| `stats` | 查看统计信息 |
-| `rebuild-index` | 重建语义索引 |
+```bash
+pip install -e .[dev]
+```
+
+## CLI
+
+安装后可直接使用：
+
+```bash
+qwen-mem stats
+qwen-mem search "关键词"
+qwen-mem semantic "语义查询"
+qwen-mem recent --limit 10
+qwen-mem budgeted-search "查询" --budget 500
+```
+
+也可以用模块方式运行：
+
+```bash
+python -m qwen_memory.mem stats
+python -m qwen_memory.mem init-demo
+```
+
+常用命令：
+
+- `add --summary "..." --importance 0.9`
+- `obs --session "id" --type bugfix --content "..."`
+- `end --session "id" --summary "..."`
+- `search "query"`
+- `search-obs "query" --type bugfix`
+- `semantic "query"`
+- `recent --limit 10`
+- `detail "session_id"`
+- `timeline "session_id"`
+- `versions -t session -e "id"`
+- `rollback -t session -e "id" -s 1`
+- `trigger "用户消息"`
+- `budgeted-search "query" --budget 500`
+- `weekly-report`
 
 ## MCP 集成
 
-在 `.claude.json` 或 `settings.json` 中添加：
+本地启动：
+
+```bash
+python -m qwen_memory.mcp_server
+```
+
+示例配置：
 
 ```json
 {
   "mcpServers": {
     "qwen-memory": {
       "command": "python",
-      "args": ["-X", "utf8", "/path/to/mcp_server.py"]
+      "args": ["-m", "qwen_memory.mcp_server"]
     }
   }
 }
 ```
 
-### MCP 工具
+当前提供的核心工具包括：
 
-`mem_search`, `mem_add_session`, `mem_add_obs`, `mem_recent`, `mem_detail`, `mem_stats`, `mem_rollback`, `mem_versions`
+- `mem_context`
+- `mem_search`
+- `mem_add_session`
+- `mem_add_obs`
+- `mem_recent`
+- `mem_detail`
+- `mem_stats`
+- `mem_rollback`
+- `mem_versions`
+- `mem_budget_log`
+- `mem_weekly_report`
 
-## 项目结构
+## Web 查看器
 
-```text
-store.py       — 核心存储层（SQLite + FTS5 + 版本控制 + 迁移）
-mem.py         — CLI 工具
-semantic.py    — TF-IDF 语义搜索
-web_viewer.py  — Web 查看器（内置 HTTP 服务器）
-mcp_server.py  — MCP Server（stdio JSON-RPC）
+```bash
+python -m qwen_memory.web_viewer --port 37777
 ```
 
-### 设计原则
+打开 [http://localhost:37777](http://localhost:37777)
 
-1. **单一写入路径**：所有写操作统一走 `upsert_session()` / `add_observation()`
-2. **save / end 分离**：`save` 只负责 upsert 数据，`end` 只负责写 `ended_at`
-3. **稳定 FTS 键**：FTS 使用 `rowid` 关联，而不是依赖内容回连
-4. **事务化回滚**：主表、FTS、版本记录要么一起成功，要么一起回滚
-5. **融合搜索**：优先保留关键词检索排序，再补语义结果
-6. **语义过期检测**：基于内容签名（数量 + 长度 + 最大更新时间）自动判断索引是否过期
+## 数据库与迁移
+
+- 默认数据库位置：`src/qwen_memory/data/memories.db`
+- 测试中可通过 `store.set_db_path(...)` 覆盖数据库路径
+- 打开数据库时会自动执行 schema 初始化与迁移
+- 当前迁移已覆盖 `summary_compact`、`context_rules`、`memory_budget_log.cache_hit`、`trigger_log`
 
 ## 测试
 
-```bash
-# 回归测试（23 项）
-python tests/regression_test.py
+脚本式回归：
 
-# 压力测试（17 项）
-python tests/stress_test.py
+```bash
+python tests/test_regression.py
+python tests/test_stress.py
+python tests/test_budget.py
+python tests/test_trigger.py
+python tests/test_rollback.py
+python tests/test_experience.py
 ```
+
+## 发布注意事项
+
+- 本项目优先服务个人工作流，不承诺重型分布式能力
+- 不应提交真实数据库、缓存索引、临时日志或个人敏感记忆
+- 发布前请确认 README 命令、安装入口、测试脚本与 GitHub 首页描述一致
 
 ## License
 

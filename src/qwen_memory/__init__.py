@@ -1,3 +1,3 @@
-"""
-Qwen Memory — 持久化记忆系统
-"""
+"""Qwen Memory package."""
+
+__version__ = "1.1.0"

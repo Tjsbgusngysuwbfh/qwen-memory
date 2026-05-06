@@ -20,13 +20,22 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install .
+          python -m pip install -e .[dev]
 
-      - name: Package smoke test
+      - name: CLI smoke test
         run: python -m qwen_memory.mem stats
 
-      - name: Regression test
-        run: python tests/regression_test.py
+      - name: Regression suite
+        run: python tests/test_regression.py
 
-      - name: Stress test
-        run: python tests/stress_test.py
+      - name: Experience suite
+        run: python tests/test_experience.py
+
+      - name: Budget suite
+        run: python tests/test_budget.py
+
+      - name: Trigger suite
+        run: python tests/test_trigger.py
+
+      - name: Rollback suite
+        run: python tests/test_rollback.py

@@ -1,18 +1,27 @@
-# Data
+# Runtime data
 data/
+src/qwen_memory/data/
 *.db
-*.json
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 *.egg-info/
-dist/
+.pytest_cache/
+.mypy_cache/
 build/
+dist/
 
-# Fix script (temporary)
-fix_paths.py
+# Local artifacts
+*.log
+*.tmp
+*.bak
 
 # IDE
 .vscode/
